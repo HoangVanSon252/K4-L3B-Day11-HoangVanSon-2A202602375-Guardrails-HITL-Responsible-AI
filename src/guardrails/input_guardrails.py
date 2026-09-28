@@ -8,8 +8,6 @@ Status convention (không dùng True/False mơ hồ):
   ``"BLOCK"`` = chặn / không cho qua
   ``"ALLOW"`` = cho qua
 """
-from __future__ import annotations
-
 import re
 from typing import Literal
 
@@ -55,10 +53,17 @@ def detect_injection(user_input: str) -> InputStatus:
         # TODO: Add at least 5 regex patterns
         # Example:
         # r"ignore (all )?(previous|above) instructions",
+        r"ignore (all )?(previous|above) instructions",
+        r"you are now",
+        r"system prompt",
+        r"reveal your (instructions|prompt)",
+        r"pretend you are",
+        r"act as (a |an )?unrestricted"
     ]
 
+    clear_input = re.sub(r'[\u200b\u200c\u200d\ufeff]', '', user_input)
     for pattern in INJECTION_PATTERNS:
-        if re.search(pattern, user_input, re.IGNORECASE):
+        if re.search(pattern, clear_input, re.IGNORECASE):
             return "BLOCK"
     return "ALLOW"
 
@@ -88,10 +93,23 @@ def topic_filter(user_input: str) -> InputStatus:
 
     # TODO: Implement logic:
     # 1. If input contains any blocked topic -> return "BLOCK"
+    for topic in BLOCKED_TOPICS:
+        if topic.lower() in input_lower:
+            return "BLOCK"
     # 2. If input doesn't contain any allowed topic -> return "BLOCK"
-    # 3. Otherwise -> return "ALLOW"
+    has_allowed = False
+    for topic in ALLOWED_TOPICS:
+        if topic.lower() in input_lower:
+            has_allowed = True
+            break
 
-    pass  # Replace with your implementation
+    if not has_allowed:
+        return "BLOCK"
+    
+    # 3. Otherwise -> return "ALLOW"
+    return "ALLOW"
+
+    
 
 
 # ============================================================
@@ -147,11 +165,17 @@ class InputGuardrailPlugin(base_plugin.BasePlugin):
         # TODO: Implement logic:
         # 1. Call detect_injection(text)
         #    - If "BLOCK": increment blocked_count, return self._block_response("...")
+        if detect_injection(text) == "BLOCK":
+            self.blocked_count += 1
+            return self._block_response("Tài khoản của bạn đã ghi nhận có hành vi bất thường.. Yêu cầu bị chặn.")
         # 2. Call topic_filter(text)
         #    - If "BLOCK": increment blocked_count, return self._block_response("...")
+        if  topic_filter(text) =="BLOCK":
+            self.blocked_count += 1
+            return self._block_response("Xin lỗi toi chỉ hỗ trowh các vấn đề lên quan đến dịch vụ ngân hàng VinBank.")
         # 3. If both return "ALLOW": return None (let message through)
 
-        pass  # Replace with your implementation
+        return None 
 
 
 # ============================================================

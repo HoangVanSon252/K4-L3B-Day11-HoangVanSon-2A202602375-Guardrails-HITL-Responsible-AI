@@ -42,11 +42,11 @@ def content_filter(response: str) -> dict:
     # PII patterns to check
     PII_PATTERNS = {
         # TODO: Add regex patterns for:
-        # - VN phone number: r"0\d{9,10}"
-        # - Email: r"[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}"
-        # - National ID (CMND/CCCD): r"\b\d{9}\b|\b\d{12}\b"
-        # - API key pattern: r"sk-[a-zA-Z0-9-]+"
-        # - Password pattern: r"password\s*[:=]\s*\S+"
+        "VN phone number": r"\b0\d{9}\b",
+        "Email": r"[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}",
+        "National ID (CMND/CCCD)": r"\b\d{9}\b|\b\d{12}\b",
+        "API key pattern": r"sk-[a-zA-Z0-9-]+",
+        "Password pattern": r"password\s*(?:[:=]|is)\s*\S+",
     }
 
     for name, pattern in PII_PATTERNS.items():
@@ -176,12 +176,29 @@ class OutputGuardrailPlugin(base_plugin.BasePlugin):
         # 1. Call content_filter(response_text)
         #    - If issues found: replace llm_response.content with redacted version
         #    - Increment self.redacted_count
+        filter_result = content_filter(response_text)
+        if not filter_result["safe"]:
+            llm_response.content = types.Content(
+                role="model",
+                parts=[types.Part.from_text(text=filter_result["redacted"])]
+            )
+            self.redacted_count += 1
+            response_text = filter_result["redacted"]
         # 2. If use_llm_judge: call llm_safety_check(response_text)
         #    - If unsafe: replace llm_response.content with a safe message
         #    - Increment self.blocked_count
+        
+        if self.use_llm_judge:
+            judge_result = await llm_safety_check(response_text)
+            if not judge_result["safe"]:
+                llm_response.content = types.Content(
+                    role="model",
+                    parts=[types.Part.from_text(text="Câu trả lời đã bị chặn do vi phạm chính sách an toàn.")]
+                )
+                self.blocked_count += 1
         # 3. Return llm_response (possibly modified)
 
-        return llm_response  # TODO: modify if needed
+        return llm_response
 
 
 # ============================================================
